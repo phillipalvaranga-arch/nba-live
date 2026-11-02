@@ -19,27 +19,29 @@ async function games(q){
   app.innerHTML=`<div class="bar"><button onclick="location.hash='#/?d=${shift(-1)}'">◀</button>
    <input type="date" value="${date}" onchange="location.hash='#/?d='+this.value"><button onclick="location.hash='#/?d=${shift(1)}'">▶</button>
    <button onclick="location.hash='#/'">Today</button><span class="day">${ymdDay(date)}</span><span class="muted">${live?'<span class="live">LIVE</span> auto-refresh 15s':''} ${ev.length} game(s)</span></div>
-   <div class="grid">${ev.map(e=>{const c=e.competitions[0],cs=[...c.competitors].sort(a=>a.homeAway==='away'?-1:1),fin=c.status.type.completed,fav=cs.some(x=>f.includes(x.team.id));
+   <div id="fn"></div><div class="grid">${ev.map(e=>{const c=e.competitions[0],cs=[...c.competitors].sort(a=>a.homeAway==='away'?-1:1),fin=c.status.type.completed,fav=cs.some(x=>f.includes(x.team.id));
     const ld=(c.leaders||[]).find(l=>l.name==='points');
-    return `<a class="card ${fav?'fav':''}" href="#/game/${e.id}"><div class="st"><span>${status(c)}</span><span>${esc(c.broadcasts?.[0]?.names?.join(', ')||'')}</span></div>
+    return `<a class="card ${fav?'fav':''}" href="#/game/${e.id}${c.status.type.state==='pre'?'?t=players':''}"><div class="st"><span>${status(c)}</span><span>${esc(c.broadcasts?.[0]?.names?.join(', ')||'')}</span></div>
     ${cs.map(t=>`<div class="row ${fin&&!t.winner?'lose':''}"><img src="${t.team.logo}" alt="" loading="lazy">${star(t.team.id)}<span class="n">${esc(t.team.shortDisplayName)} <small class="muted">${esc(t.records?.[0]?.summary||'')}</small></span><span class="s">${c.status.type.state==='pre'?'':t.score}</span></div>`).join('')}
     ${c.status.type.state!=='pre'?cs.map(t=>{const l=(t.leaders||[]).find(x=>x.name==='points')?.leaders?.[0];return l?`<div class="leader">${esc(t.team.abbreviation)}: ${esc(l.athlete.shortName)} ${l.displayValue} PTS</div>`:''}).join(''):''}</a>`}).join('')||'<p class="muted">No games on this date.</p>'}</div>`;
+  favNext().then(h=>{const x=$('#fn');if(x)x.innerHTML=h}).catch(()=>{});
   if(live||ev.some(e=>e.status.type.state==='pre'&&new Date(e.date)-Date.now()<9e5))schedule(15000);
 }
 async function game(id,q){
-  const d=await j(`${API}/summary?event=${id}`),h=d.header.competitions[0],cs=[...h.competitors].sort(a=>a.homeAway==='away'?-1:1),tab=q.get('t')||'box';
+  const d=await j(`${API}/summary?event=${id}`),h=d.header.competitions[0],cs=[...h.competitors].sort(a=>a.homeAway==='away'?-1:1),tab=q.get('t')||(h.status.type.state==='pre'?'players':'box');
   const st=h.status.type;
   let html=`<div class="bar"><button onclick="history.back()">← Back</button></div><div class="card"><div class="hero">${cs.map((t,i)=>`<div><img src="${t.team.logos?.[0]?.href||t.team.logo}" alt=""><div>${star(t.team.id)}<b>${esc(t.team.displayName)}</b></div><div class="muted">${esc(t.record?.[0]?.displayValue||'')}</div></div>${i===0?`<div><div class="sc">${cs[0].score??'-'} – ${cs[1].score??'-'}</div><div>${st.state==='in'?`<span class="live">${esc(st.shortDetail)}</span>`:st.state==='pre'?ctTime(h.date):esc(st.detail)}</div><div class="muted">${ctDay(h.date)}</div></div>`:''}`).join('')}</div></div>`;
   const per=Math.max(4,...cs.map(t=>(t.linescores||[]).length));
   if(cs[0].linescores){html+=`<h2>Score by Quarter</h2><div class="tw"><table><tr><th>Team</th>${[...Array(per)].map((_,i)=>`<th>${i<4?'Q'+(i+1):'OT'+(i>4?i-3:'')}</th>`).join('')}<th>T</th></tr>${cs.map(t=>`<tr><td>${esc(t.team.abbreviation)}</td>${[...Array(per)].map((_,i)=>`<td>${t.linescores?.[i]?.displayValue??''}</td>`).join('')}<td><b>${t.score}</b></td></tr>`).join('')}</table></div>`}
-  html+=`<div class="tabs">${[['box','Box Score'],['plays','Play-by-Play'],['team','Team Stats']].map(([k,v])=>`<button class="${tab===k?'on':''}" onclick="location.hash='#/game/${id}?t=${k}'">${v}</button>`).join('')}</div>`;
+  html+=`<div class="tabs">${[['players','Players'],['box','Box Score'],['plays','Play-by-Play'],['team','Team Stats']].map(([k,v])=>`<button class="${tab===k?'on':''}" onclick="location.hash='#/game/${id}?t=${k}'">${v}</button>`).join('')}</div>`;
   if(tab==='box'){for(const p of d.boxscore.players||[]){const s=p.statistics[0];if(!s)continue;const pi=s.labels.indexOf('PTS');
     const pts=s.athletes.filter(a=>a.stats?.length).map(a=>+a.stats[pi]||0),top=[...pts].sort((a,b)=>b-a).slice(0,3).filter(x=>x>0);
     html+=`<h2><img src="${p.team.logo}" style="width:22px;vertical-align:middle"> ${esc(p.team.displayName)}</h2><div class="tw"><table><tr><th>Player</th>${s.labels.map(l=>`<th>${l}</th>`).join('')}</tr>${s.athletes.map(a=>`<tr class="${a.stats?.length&&top.includes(+a.stats[pi])?'top':''}"><td><a style="color:inherit" href="#/player/${a.athlete.id}?team=${p.team.id}">${esc(a.athlete.shortName||a.athlete.displayName)}</a> <small class="muted">${esc(a.athlete.position?.abbreviation||'')}${a.starter?' ·S':''}</small></td>${a.stats?.length?a.stats.map(x=>`<td>${x}</td>`).join(''):`<td colspan="${s.labels.length}" class="muted" style="text-align:left">${esc(a.reason||'DNP')}</td>`}</tr>`).join('')}${s.totals?`<tr><td><b>TOTAL</b></td>${s.totals.map(x=>`<td><b>${x}</b></td>`).join('')}</tr>`:''}</table></div>`}
     if(!(d.boxscore.players||[]).length)html+='<p class="muted">Box score available once the game starts.</p>'}
   if(tab==='plays'){const pl=(d.plays||[]).slice().reverse();html+=pl.length?`<div class="card plays" style="padding:0">${pl.map(p=>`<div class="${p.scoringPlay?'sp':''}"><b>${esc(p.period?.displayValue?.replace(' Quarter','')||'')} ${esc(p.clock?.displayValue)}</b> · ${p.awayScore}-${p.homeScore} · ${esc(p.text)}</div>`).join('')}</div>`:'<p class="muted">No play-by-play yet.</p>'}
   if(tab==='team'){const T=d.boxscore.teams||[];if(T.length){const names=T[0].statistics.map(s=>s.label);html+=`<div class="tw"><table><tr><th>Stat</th>${T.map(t=>`<th>${esc(t.team.abbreviation)}</th>`).join('')}</tr>${names.map((n,i)=>`<tr><td>${esc(n)}</td>${T.map(t=>`<td>${esc(t.statistics[i]?.displayValue)}</td>`).join('')}</tr>`).join('')}</table></div>`}}
-  app.innerHTML=html;if(st.state==='in')schedule(15000);
+  if(tab==='players')html+='<div id="plb"><p class="muted">Loading players…</p></div>';
+  app.innerHTML=html;if(tab==='players')playersBlock(d,$('#plb')).catch(()=>{$('#plb').innerHTML='<p class="muted">Player info not available right now.</p>'});if(st.state==='in')schedule(15000);
 }
 async function standings(){
   const d=await j(STD),f=favs();const g=(e,n)=>e.stats.find(s=>s.name===n||s.type===n)?.displayValue??'';
@@ -76,7 +78,7 @@ async function team(id){
   const tok=rt;const [t,r,s]=await Promise.all([j(`${API}/teams/${id}`),j(`${API}/teams/${id}/roster`),j(`${API}/teams/${id}/schedule`).catch(()=>({events:[]}))]);const tm=t.team;
   rosters[id]=r;const cur=r.season?.year||0,curLbl=r.season?.displayName||'this season';const nx=tm.nextEvent?.[0];
   const view=localStorage.rview||'cards',sort=localStorage.rsort||'jersey';
-  app.innerHTML=`<div class="bar"><button onclick="history.back()">← Back</button></div><div class="card"><div class="row"><img src="${tm.logos?.[0]?.href}" style="width:64px;height:64px">${star(id)}<span class="n" style="font-size:22px">${esc(tm.displayName)}</span><span>${esc(tm.record?.items?.[0]?.summary||'')} <span class="muted">${esc(tm.standingSummary||'')}</span></span></div>${nx?`<div class="muted">Next: ${esc(nx.shortName)} · ${ctDay(nx.date)} · ${ctTime(nx.date)}</div>`:''}</div>
+  app.innerHTML=`<div class="bar"><button onclick="history.back()">← Back</button></div><div class="card"><div class="row"><img src="${tm.logos?.[0]?.href}" style="width:64px;height:64px">${star(id)}<span class="n" style="font-size:22px">${esc(tm.displayName)}</span><span>${esc(tm.record?.items?.[0]?.summary||'')} <span class="muted">${esc(tm.standingSummary||'')}</span></span></div>${nx?`<div class="muted">Next: ${esc(nx.shortName)} · ${ctDay(nx.date)} · ${ctTime(nx.date)} · <a href="#/game/${nx.id}?t=players">👥 Who's playing</a></div>`:''}</div>
   <h2>Roster <small class="muted">${(r.athletes||[]).length} players</small></h2>
   <div class="bar"><div class="seg"><button class="${view==='cards'?'on':''}" onclick="localStorage.rview='cards';route(true)">Cards</button><button class="${view==='table'?'on':''}" onclick="localStorage.rview='table';route(true)">Stats table</button></div>
   <label class="muted">Sort <select onchange="localStorage.rsort=this.value;route(true)">${[['jersey','Jersey #'],['name','Name'],['PTS','Points'],['REB','Rebounds'],['AST','Assists'],['MIN','Minutes']].map(([k,v])=>`<option value="${k}" ${sort===k?'selected':''}>${v}</option>`).join('')}</select></label></div>
@@ -117,6 +119,32 @@ async function player(id,q){
   ${sr?`<h2>Career by Season</h2><div class="tw"><table><tr><th>Season</th><th>Team</th>${SCOLS.map(c=>`<th>${c[1]}</th>`).join('')}</tr>${[...sr.rows].reverse().map(r=>`<tr><td>${esc(r.label)}</td><td>${esc(r.teams.map(tAb).filter(Boolean).join('/')||D)}</td>${SCOLS.map(c=>`<td>${sv(r,c[0])}</td>`).join('')}</tr>`).join('')}${sr.career?`<tr class="top"><td>Career</td><td></td>${SCOLS.map(c=>`<td>${sv({v:sr.career},c[0])}</td>`).join('')}</tr>`:''}</table></div>`:''}
   <p class="muted" style="font-size:12px">Regular-season per-game averages from ESPN. “${D}” = not available.</p>`;
 }
+
+// Next-game players: ESPN injury report (in game summary) + recent rotation from last 3 box scores. Facts only; projections labeled.
+const stMap=s=>{s=(s||'').toLowerCase();if(s==='out')return['Out','out'];if(s.includes('doubt'))return['Doubtful','q'];if(s.includes('prob'))return['Probable — expected to play','ok'];if(s.includes('day')||s.includes('quest')||s.includes('gtd'))return['Questionable','q'];if(s.includes('suspen'))return['Out (suspension)','out'];return[s||'Listed','q']};
+const ctStamp=s=>s?new Date(s).toLocaleString('en-US',{timeZone:TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' CT':'';
+async function rotation(lf){const ids=(lf?.events||[]).slice(-3).map(e=>e.id);const agg={};let n=0;
+  await Promise.all(ids.map(id=>j(`${API}/summary?event=${id}`).then(s=>{const p=(s.boxscore?.players||[]).find(x=>x.team.id==lf.team.id);const st=p?.statistics?.[0];if(!st)return;n++;const mi=st.labels.indexOf('MIN');
+    for(const a of st.athletes){const m=parseFloat(a.stats?.[mi]);if(!(m>0))continue;const r=agg[a.athlete.id]||={a:a.athlete,min:0,g:0,s:0};r.min+=m;r.g++;if(a.starter)r.s++}}).catch(()=>{})));
+  return{n,list:Object.values(agg).sort((x,y)=>y.min-x.min)}}
+async function playersBlock(d,el){const h=d.header.competitions[0],st=h.status.type,cs=[...h.competitors].sort(a=>a.homeAway==='away'?-1:1);
+  const asOf=ctStamp(new Date());let out=`<h2>👥 Players for this game <small class="muted">Tip-off ${ctDay(h.date)} · ${ctTime(h.date)}</small></h2>`;
+  for(const c of cs){const tid=c.team.id;const inj=(d.injuries||[]).find(x=>x.team.id==tid)?.injuries||[];const injBy={};inj.forEach(i=>injBy[i.athlete.id]=i);
+    let rows='',src='';
+    if(st.state!=='pre'){const p=(d.boxscore?.players||[]).find(x=>x.team.id==tid)?.statistics?.[0];
+      if(p){rows=p.athletes.map(a=>{const pl=a.stats?.length;const lab=pl?['Playing'+(a.starter?' (starter)':''),'ok']:[a.reason?'Inactive / DNP — '+a.reason:'Did not play','out'];return pr(a.athlete,lab)}).join('');src='Official game box score (ESPN)'}}
+    if(!rows){const lf=(d.lastFiveGames||[]).find(x=>x.team.id==tid);let rot={n:0,list:[]};try{rot=await rotation(lf)}catch(e){}
+      const seen=new Set();
+      rows=rot.list.slice(0,11).map(r=>{seen.add(r.a.id);const i=injBy[r.a.id];const lab=i?stMap(i.status):['Potential lineup (projected)','proj'];return pr(r.a,lab,i,`${(r.min/r.g).toFixed(0)} min/g, ${r.s} start(s) in last ${rot.n}`)}).join('')
+       +inj.filter(i=>!seen.has(i.athlete.id)).map(i=>pr(i.athlete,stMap(i.status),i)).join('');
+      src=`Injury statuses: ESPN NBA injury report${inj.length?' (latest update '+ctStamp(inj.map(i=>i.date).sort().pop())+')':' — no players listed'}. “Potential lineup” = projected from minutes in the team's last ${rot.n||0} game(s) (ESPN box scores); not an official lineup.`;
+      if(!rot.n&&!inj.length)rows='<p class="muted">Player info not available right now.</p>'}
+    out+=`<div class="card"><b>${esc(c.team.displayName)}</b><div class="plist">${rows}</div><div class="muted" style="font-size:12px">${src} As of ${asOf}.</div></div>`}
+  el.innerHTML=out}
+function pr(a,[lab,cls],i,extra){const why=i?[i.details?.type,i.details?.detail,i.details?.side&&i.details.side!=='Not Specified'?i.details.side:'' ].filter(Boolean).join(' · '):'';const ret=i?.details?.returnDate?` · est. return ${esc(i.details.returnDate)}`:'';
+  return `<div class="pl"><a href="#/player/${a.id}">${esc(a.displayName||a.shortName)}</a> <small class="muted">${esc(a.position?.abbreviation||'')}</small> <span class="lb ${cls}">${esc(lab)}</span>${why?`<small class="muted"> — ${esc(why)}${ret}</small>`:''}${extra?`<small class="muted"> · ${esc(extra)}</small>`:''}</div>`}
+async function favNext(){const f=favs();if(!f.length)return'';const ts=await Promise.all(f.map(id=>j(`${API}/teams/${id}`).catch(()=>null)));
+  return `<h2>★ Favorites — next game</h2><div class="grid">${ts.filter(Boolean).map(t=>{const nx=t.team.nextEvent?.[0];return nx?`<a class="card fav" href="#/game/${nx.id}?t=players"><b>${esc(t.team.displayName)}</b><div>${esc(nx.shortName)}</div><div class="muted">${ctDay(nx.date)} · ${ctTime(nx.date)}</div><div class="lb proj">👥 See who's playing</div></a>`:''}).join('')}</div>`}
 
 async function route(refresh){
   clearTimeout(timer);rt++;const [p,qs]=location.hash.slice(1).split('?'),q=new URLSearchParams(qs||''),seg=(p||'/').split('/').filter(Boolean);
