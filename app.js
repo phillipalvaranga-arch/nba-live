@@ -30,7 +30,7 @@ async function games(q){
 async function game(id,q){
   const d=await j(`${API}/summary?event=${id}`),h=d.header.competitions[0],cs=[...h.competitors].sort(a=>a.homeAway==='away'?-1:1),tab=q.get('t')||(h.status.type.state==='pre'?'players':'box');
   const st=h.status.type;
-  let html=`<div class="bar"><button onclick="history.back()">← Back</button></div><div class="card"><div class="hero">${cs.map((t,i)=>`<div><img src="${t.team.logos?.[0]?.href||t.team.logo}" alt=""><div>${star(t.team.id)}<b>${esc(t.team.displayName)}</b></div><div class="muted">${esc(t.record?.[0]?.displayValue||'')}</div></div>${i===0?`<div><div class="sc">${cs[0].score??'-'} – ${cs[1].score??'-'}</div><div>${st.state==='in'?`<span class="live">${esc(st.shortDetail)}</span>`:st.state==='pre'?ctTime(h.date):esc(st.detail)}</div><div class="muted">${ctDay(h.date)}</div></div>`:''}`).join('')}</div></div>`;
+  let html=`<div class="bar"><button onclick="history.back()">← Back</button></div><div class="sbpin"><div class="card"><div class="hero">${cs.map((t,i)=>`<div><img src="${t.team.logos?.[0]?.href||t.team.logo}" alt=""><div>${star(t.team.id)}<b>${esc(t.team.displayName)}</b></div><div class="muted">${esc(t.record?.[0]?.displayValue||'')}</div></div>${i===0?`<div><div class="sc">${cs[0].score??'-'} – ${cs[1].score??'-'}</div><div>${st.state==='in'?`<span class="live">${esc(st.shortDetail)}</span>`:st.state==='pre'?ctTime(h.date):esc(st.detail)}</div><div class="muted">${ctDay(h.date)}</div></div>`:''}`).join('')}</div></div></div>`;
   const per=Math.max(4,...cs.map(t=>(t.linescores||[]).length));
   if(cs[0].linescores){html+=`<h2>Score by Quarter</h2><div class="tw"><table><tr><th>Team</th>${[...Array(per)].map((_,i)=>`<th>${i<4?'Q'+(i+1):'OT'+(i>4?i-3:'')}</th>`).join('')}<th>T</th></tr>${cs.map(t=>`<tr><td>${esc(t.team.abbreviation)}</td>${[...Array(per)].map((_,i)=>`<td>${t.linescores?.[i]?.displayValue??''}</td>`).join('')}<td><b>${t.score}</b></td></tr>`).join('')}</table></div>`}
   html+=`<div class="tabs">${[['players','Players'],['box','Box Score'],['plays','Play-by-Play'],['team','Team Stats']].map(([k,v])=>`<button class="${tab===k?'on':''}" onclick="location.hash='#/game/${id}?t=${k}'">${v}</button>`).join('')}</div>`;
@@ -153,5 +153,7 @@ async function route(refresh){
   try{if(!seg.length)await games(q);else if(seg[0]==='game')await game(seg[1],q);else if(seg[0]==='standings')await standings();else if(seg[0]==='teams')await teams();else if(seg[0]==='team')await team(seg[1]);else if(seg[0]==='player')await player(seg[1],q)}
   catch(e){if(!refresh)app.innerHTML=`<p class="muted">Couldn't load data (${esc(e.message)}). Check your connection.</p><button onclick="route()">Retry</button>`;schedule(20000)}
 }
-addEventListener('hashchange',()=>{navCount++;route()});document.addEventListener('visibilitychange',()=>{if(!document.hidden)route(true)});route();
+addEventListener('hashchange',()=>{navCount++;route()});document.addEventListener('visibilitychange',()=>{if(!document.hidden)route(true)});
+(function(){const h=document.querySelector('header');if(!h)return;const set=()=>document.documentElement.style.setProperty('--header-h',h.getBoundingClientRect().height+'px');set();addEventListener('resize',set);if(window.ResizeObserver)new ResizeObserver(set).observe(h)})();
+route();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
